@@ -7,7 +7,7 @@
 
 const CONFIG = {
   // The WhatsApp Community group link users join after payment.
-  whatsappLink: "https://chat.whatsapp.com/GzB9f8H8d4C2Z1L3kQ7wXy",
+  whatsappLink: "https://chat.whatsapp.com/DsQdAzZRgFU8bI6BQzmnLm",
   
   // Payee UPI ID for generating the dynamic QR code
   upiId: "9178405636@ybl",
@@ -192,6 +192,12 @@ function initPaymentModal() {
   btnWhatsappDirect.addEventListener("click", () => {
     window.location.href = CONFIG.whatsappLink;
   });
+
+  // Auto-trigger WhatsApp redirect modal if returning from payment redirect with success status
+  const urlParams = new URLSearchParams(window.location.search);
+  if (urlParams.get("payment") === "success" || urlParams.get("status") === "success" || urlParams.get("paid") === "true") {
+    showSuccessModal();
+  }
 
   function openModal() {
     modal.classList.add("active");
