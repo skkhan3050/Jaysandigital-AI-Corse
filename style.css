@@ -2467,6 +2467,37 @@ h1, h2, h3, h4 {
   }
 }
 
+/* Hero Top Orange Badge */
+.hero-top-orange-badge {
+  background: #ff5500;
+  background: linear-gradient(90deg, #FF5500 0%, #FF6B00 100%);
+  color: #ffffff;
+  font-weight: 800;
+  font-size: 0.95rem;
+  padding: 8px 20px;
+  border-radius: 8px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  text-align: center;
+  font-family: 'Outfit', 'Inter', sans-serif;
+  letter-spacing: 0.02em;
+  text-transform: uppercase;
+  box-shadow: 0 4px 15px rgba(255, 85, 0, 0.35);
+  max-width: 100%;
+  line-height: 1.35;
+}
+
+@media (max-width: 576px) {
+  .hero-top-orange-badge {
+    font-size: 0.8rem;
+    padding: 7px 14px;
+    border-radius: 6px;
+    letter-spacing: 0.01em;
+  }
+}
+
+
 
 
 

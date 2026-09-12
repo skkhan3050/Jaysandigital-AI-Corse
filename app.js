@@ -100,6 +100,29 @@ function initCollageFrameInteractivity() {
 }
 
 /**
+ * Helper function for Google Tag Manager & Meta Pixel Event Tracking
+ */
+function trackEvent(eventName, eventData = {}) {
+  window.dataLayer = window.dataLayer || [];
+  window.dataLayer.push({
+    event: eventName,
+    ...eventData,
+    timestamp: new Date().toISOString()
+  });
+
+  // Meta Pixel / Facebook Event Manager fallback if active
+  if (typeof fbq === 'function') {
+    if (eventName === 'purchase' || eventName === 'payment_success') {
+      fbq('track', 'Purchase', { value: eventData.value || 99, currency: 'INR' });
+    } else if (eventName === 'initiate_checkout') {
+      fbq('track', 'InitiateCheckout', { value: eventData.value || 99, currency: 'INR' });
+    }
+  }
+
+  console.log(`[GTM Event Manager] Fired: ${eventName}`, eventData);
+}
+
+/**
  * 3. Checkout & Payment Modal Flow
  */
 function initPaymentModal() {
@@ -127,9 +150,15 @@ function initPaymentModal() {
   
   if (!modal) return;
 
-  // Trigger Checkout: Redirect if link exists, launch Razorpay inline if key exists, or open local modal
+  // Trigger Checkout: Fire GTM InitiateCheckout tracking event and open checkout
   joinButtons.forEach(btn => {
     btn.addEventListener("click", () => {
+      trackEvent('initiate_checkout', {
+        value: CONFIG.ticketPrice,
+        currency: "INR",
+        item_name: "AI Creator Community Membership"
+      });
+
       if (CONFIG.razorpayPageLink) {
         window.location.href = CONFIG.razorpayPageLink;
       } else if (CONFIG.razorpayKeyId) {
@@ -196,7 +225,7 @@ function initPaymentModal() {
   // Auto-trigger WhatsApp redirect modal if returning from payment redirect with success status
   const urlParams = new URLSearchParams(window.location.search);
   if (urlParams.get("payment") === "success" || urlParams.get("status") === "success" || urlParams.get("paid") === "true") {
-    showSuccessModal();
+    showSuccessModal(urlParams.get("txnid") || ("TXN_" + Date.now()));
   }
 
   function openModal() {
@@ -247,7 +276,16 @@ function initPaymentModal() {
     }, 2500);
   }
 
-  function showSuccessModal() {
+  function showSuccessModal(txnId = null) {
+    // Fire Purchase event to GTM & Meta Pixel Event Manager
+    trackEvent('purchase', {
+      value: CONFIG.ticketPrice,
+      currency: "INR",
+      transaction_id: txnId || ("TXN_" + Date.now()),
+      item_name: "AI Creator Community Membership",
+      redirect_url: CONFIG.whatsappLink
+    });
+
     successOverlay.classList.add("active");
     
     // Initialize loading progress animation
