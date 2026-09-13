@@ -2142,13 +2142,23 @@ h1, h2, h3, h4 {
   transition: max-height 0.35s cubic-bezier(0.4, 0, 0.2, 1), padding 0.35s ease;
 }
 
-.accordion-content p {
-  margin: 0;
-  padding-bottom: 24px;
+.accordion-content p,
+.accordion-content ul,
+.accordion-content li {
   font-family: var(--font-sans);
   font-size: 1.05rem;
   color: #cbd5e1 !important; /* Elegant light slate for responses inside black box */
   line-height: 1.6;
+}
+
+.accordion-content p {
+  margin: 0;
+  padding-bottom: 12px;
+}
+
+.accordion-content ul {
+  margin: 0;
+  padding-bottom: 24px;
 }
 
 .accordion-content a {
