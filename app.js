@@ -23,7 +23,7 @@ const CONFIG = {
 
   // Razorpay Hosted Payment Page link. Set to "" to run in simulation mode. 
   // Paste your active Razorpay Payment Page URL here when going live.
-  razorpayPageLink: "https://razorpay.me/@jaysandigital?amount=CVDUr6Uxp2FOGZGwAHntNg%3D%3D",
+  razorpayPageLink: "https://rzp.io/rzp/pUF7Ssh2",
 };
 
 document.addEventListener("DOMContentLoaded", () => {
@@ -222,10 +222,10 @@ function initPaymentModal() {
     window.location.href = CONFIG.whatsappLink;
   });
 
-  // Auto-trigger WhatsApp redirect modal if returning from payment redirect with success status
+  // Auto-redirect to dedicated payment-success.html if returning from legacy payment query string
   const urlParams = new URLSearchParams(window.location.search);
   if (urlParams.get("payment") === "success" || urlParams.get("status") === "success" || urlParams.get("paid") === "true") {
-    showSuccessModal(urlParams.get("txnid") || ("TXN_" + Date.now()));
+    window.location.href = "payment-success.html";
   }
 
   function openModal() {
