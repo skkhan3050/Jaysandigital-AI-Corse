@@ -1853,6 +1853,36 @@ h1, h2, h3, h4 {
   flex-wrap: wrap;
 }
 
+a.btn-know-batch-details,
+a.btn-know-batch-details:visited,
+a.btn-know-batch-details:link {
+  background: #ff1e27 !important;
+  color: #ffffff !important;
+  font-weight: 800 !important;
+  font-size: 1rem !important;
+  padding: 12px 24px !important;
+  border-radius: 12px !important;
+  font-family: 'Outfit', 'Inter', sans-serif !important;
+  text-decoration: none !important;
+  display: inline-flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+  box-shadow: 0 4px 15px rgba(255, 30, 39, 0.4) !important;
+  transition: transform 0.2s ease, background-color 0.2s ease, box-shadow 0.2s ease !important;
+  cursor: pointer !important;
+  text-align: center !important;
+  letter-spacing: -0.01em !important;
+}
+
+a.btn-know-batch-details:hover,
+a.btn-know-batch-details:active {
+  background: #e50914 !important;
+  color: #ffffff !important;
+  text-decoration: none !important;
+  transform: translateY(-2px) !important;
+  box-shadow: 0 6px 20px rgba(255, 30, 39, 0.6) !important;
+}
+
 .info-badge {
   display: flex;
   align-items: center;
