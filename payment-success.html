@@ -227,13 +227,52 @@
     &copy; 2026 JaySan Digital Skill Academy. All rights reserved.
   </footer>
 
-  <!-- Script for Countdown & Auto Redirect -->
+  <!-- Script for Tracking, Countdown & Auto Redirect -->
   <script>
     document.addEventListener("DOMContentLoaded", () => {
       const whatsappUrl = "https://chat.whatsapp.com/DsQdAzZRgFU8bI6BQzmnLm";
       const countdownEl = document.getElementById("countdown-num");
       const progressBar = document.getElementById("progress-bar");
       let timeLeft = 3;
+
+      // Extract transaction ID from query params or storage
+      const urlParams = new URLSearchParams(window.location.search);
+      const paymentId = urlParams.get("razorpay_payment_id") || 
+                        urlParams.get("payment_id") || 
+                        urlParams.get("txn_id") || 
+                        urlParams.get("id") || 
+                        "TXN_" + Date.now();
+
+      // Deduplication check: Fire purchase event only once per transaction
+      const trackingKey = "tracked_purchase_" + paymentId;
+      if (!sessionStorage.getItem(trackingKey)) {
+        sessionStorage.setItem(trackingKey, "true");
+
+        // Fire Google Tag Manager purchase event
+        window.dataLayer = window.dataLayer || [];
+        window.dataLayer.push({
+          event: "purchase",
+          transaction_id: paymentId,
+          value: 99.00,
+          currency: "INR",
+          items: [{
+            item_id: "ai_creator_community",
+            item_name: "AI Creator Community Membership",
+            price: 99.00,
+            quantity: 1
+          }],
+          timestamp: new Date().toISOString()
+        });
+
+        // Fire Meta Pixel purchase event if fbq is defined
+        if (typeof fbq === "function") {
+          fbq("track", "Purchase", {
+            value: 99.00,
+            currency: "INR",
+            content_name: "AI Creator Community Membership"
+          });
+        }
+      }
 
       // Start progress bar animation
       setTimeout(() => {

@@ -25,13 +25,40 @@ const CONFIG = {
   razorpayPageLink: "https://rzp.io/rzp/pUF7Ssh2",
 
   // Google Sheet URL for your reference
-  googleSheetUrl: "https://docs.google.com/spreadsheets/d/1yRFF7O0RbK8RxTAmRsv9DDTB4HaTBvGcT2nVpVUc25Y/edit?usp=sharing",
+  googleSheetUrl: "https://docs.google.com/spreadsheets/d/1E7Z1G3bcATI0NrIZryYGClfvFr1lq5f9_vp1nhZjfg/edit?usp=sharing",
 
   // Google Apps Script Webhook URL for real-time Google Sheet sync
   googleSheetScriptUrl: "https://script.google.com/macros/s/AKfycbzAHDKix4xCIcpX-tQdvs7rz4GrJ8eH7mp6Fc8GD17kb_wZhZh_i9-pY4L1w4JBN_7-/exec",
 };
 
+/**
+ * UTM & Click ID Tracking Manager
+ * Preserves utm_source, utm_medium, utm_campaign, utm_content, utm_term, gclid, fbclid
+ */
+function getTrackingParams() {
+  const params = new URLSearchParams(window.location.search);
+  const utmKeys = ["utm_source", "utm_medium", "utm_campaign", "utm_content", "utm_term", "gclid", "fbclid"];
+  const tracking = {};
+
+  utmKeys.forEach(key => {
+    const val = params.get(key) || sessionStorage.getItem("saved_" + key) || localStorage.getItem("saved_" + key) || "";
+    if (val) {
+      tracking[key] = val;
+      try {
+        sessionStorage.setItem("saved_" + key, val);
+        localStorage.setItem("saved_" + key, val);
+      } catch (e) {}
+    } else {
+      tracking[key] = "";
+    }
+  });
+
+  return tracking;
+}
+
 document.addEventListener("DOMContentLoaded", () => {
+  // Capture URL tracking parameters on initial load
+  getTrackingParams();
   initSneakerGallery();
   initPaymentModal();
   initCollageFrameInteractivity();
@@ -276,6 +303,9 @@ function initPaymentModal() {
     btnSubmitPay.disabled = true;
     btnSubmitPay.innerHTML = '<i class="fa-solid fa-spinner fa-spin"></i> Processing...';
 
+    // Get active UTM and click tracking parameters
+    const tracking = getTrackingParams();
+
     // Prepare Lead & Transaction Payload
     const leadData = {
       name: name,
@@ -284,7 +314,8 @@ function initPaymentModal() {
       amount: "₹" + CONFIG.ticketPrice + ".00",
       status: "Payment Initiated",
       timestamp: new Date().toISOString(),
-      source: "Razorpay Checkout Modal"
+      source: "Razorpay Checkout Modal",
+      ...tracking
     };
 
     // Store in localStorage
@@ -300,26 +331,100 @@ function initPaymentModal() {
       customer_name: name,
       customer_email: email,
       customer_phone: cleanPhone,
-      item_name: "AI Creator Community Membership"
+      item_name: "AI Creator Community Membership",
+      ...tracking
     });
 
-    // Send data to Google Sheet Webhook
+    // Send pre-payment lead data to Google Sheet Webhook (non-blocking)
     sendDataToGoogleSheet(leadData);
 
     // Short timeout to allow network request dispatch, then proceed to payment
     setTimeout(() => {
       if (CONFIG.razorpayPageLink) {
-        // Redirect to Razorpay Payment page
-        window.location.href = CONFIG.razorpayPageLink;
+        try {
+          const redirectUrl = new URL(CONFIG.razorpayPageLink);
+          // Pass Prefill fields for Razorpay Hosted Checkout
+          redirectUrl.searchParams.set("prefill[name]", name);
+          redirectUrl.searchParams.set("prefill[email]", email);
+          redirectUrl.searchParams.set("prefill[contact]", cleanPhone);
+          // Pass Notes fields so Razorpay Webhook extracts them into payment.entity.notes
+          redirectUrl.searchParams.set("notes[customer_name]", name);
+          if (tracking.utm_source) redirectUrl.searchParams.set("notes[utm_source]", tracking.utm_source);
+          if (tracking.utm_medium) redirectUrl.searchParams.set("notes[utm_medium]", tracking.utm_medium);
+          if (tracking.utm_campaign) redirectUrl.searchParams.set("notes[utm_campaign]", tracking.utm_campaign);
+          if (tracking.utm_content) redirectUrl.searchParams.set("notes[utm_content]", tracking.utm_content);
+          if (tracking.utm_term) redirectUrl.searchParams.set("notes[utm_term]", tracking.utm_term);
+          if (tracking.gclid) redirectUrl.searchParams.set("notes[gclid]", tracking.gclid);
+          if (tracking.fbclid) redirectUrl.searchParams.set("notes[fbclid]", tracking.fbclid);
+
+          window.location.href = redirectUrl.toString();
+        } catch (e) {
+          window.location.href = CONFIG.razorpayPageLink;
+        }
       } else if (CONFIG.razorpayKeyId) {
         closeModal();
-        launchRazorpay(name, email, cleanPhone);
+        launchRazorpay(name, email, cleanPhone, tracking);
       } else {
         // Fallback simulation mode
         closeModal();
         startVerificationFlow();
       }
     }, 600);
+  }
+
+  // Fallback for standard Razorpay JS Checkout if Key ID is configured
+  function launchRazorpay(name, email, phone, tracking = {}) {
+    if (typeof Razorpay === "undefined") {
+      window.location.href = CONFIG.razorpayPageLink;
+      return;
+    }
+
+    const options = {
+      key: CONFIG.razorpayKeyId,
+      amount: CONFIG.ticketPrice * 100, // In Paise
+      currency: "INR",
+      name: "JaySan Digital Academy",
+      description: "AI Creator Community Membership",
+      image: "assets/logo (1).png",
+      prefill: {
+        name: name,
+        email: email,
+        contact: phone
+      },
+      notes: {
+        customer_name: name,
+        utm_source: tracking.utm_source || "",
+        utm_medium: tracking.utm_medium || "",
+        utm_campaign: tracking.utm_campaign || "",
+        utm_content: tracking.utm_content || "",
+        utm_term: tracking.utm_term || "",
+        gclid: tracking.gclid || "",
+        fbclid: tracking.fbclid || ""
+      },
+      theme: {
+        color: "#0F52BA"
+      },
+      handler: function(response) {
+        trackEvent("purchase", {
+          value: CONFIG.ticketPrice,
+          currency: "INR",
+          transaction_id: response.razorpay_payment_id,
+          item_name: "AI Creator Community Membership"
+        });
+        window.location.href = "payment-success.html?payment_id=" + encodeURIComponent(response.razorpay_payment_id);
+      },
+      modal: {
+        ondismiss: function() {
+          if (btnSubmitPay) {
+            btnSubmitPay.disabled = false;
+            btnSubmitPay.innerHTML = `Pay ₹${CONFIG.ticketPrice}.00`;
+          }
+        }
+      }
+    };
+
+    const rzp = new Razorpay(options);
+    rzp.open();
   }
 
   function showError(message, inputElement) {
