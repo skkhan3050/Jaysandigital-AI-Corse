@@ -60,7 +60,7 @@ document.addEventListener("DOMContentLoaded", () => {
   // Capture URL tracking parameters on initial load
   getTrackingParams();
   initSneakerGallery();
-  initPaymentModal();
+  initDirectCheckout();
   initCollageFrameInteractivity();
   initStickyCTA();
   initWorkshopCountdown();
@@ -182,350 +182,44 @@ async function sendDataToGoogleSheet(formData) {
 }
 
 /**
- * 3. Authentic Razorpay Checkout & Payment Modal Flow
+ * 3. Direct Razorpay Checkout Flow
+ * Redirects user directly to the Razorpay checkout page with tracking parameters.
  */
-function initPaymentModal() {
-  const modal = document.getElementById("payment-modal");
-  const closeBtn = document.getElementById("modal-close");
-  const joinButtons = document.querySelectorAll(".btn-join-now, .btn-workshop-join, #btn-join-sticky, .faq-orange-banner");
-  
-  const form = document.getElementById("rzp-payment-form");
-  const emailInput = document.getElementById("rzp-payer-email");
-  const phoneInput = document.getElementById("rzp-payer-phone");
-  const nameInput = document.getElementById("rzp-payer-name");
-  const btnSubmitPay = document.getElementById("btn-submit-rzp-pay");
-  const errorMsg = document.getElementById("rzp-error-message");
-  
-  const toggleUpiBtn = document.getElementById("toggle-upi-qr-view");
-  const directUpiBox = document.getElementById("direct-upi-box");
-  const upiIdText = document.getElementById("upi-id-text");
-  const upiQrImage = document.getElementById("upi-qr-image");
-  const btnCopyUpi = document.getElementById("btn-copy-upi");
-  
-  const processingOverlay = document.getElementById("processing-overlay");
-  const successOverlay = document.getElementById("success-overlay");
-  const progressBar = document.getElementById("progress-bar");
-  const btnWhatsappDirect = document.getElementById("btn-whatsapp-direct");
-  
-  if (!modal) return;
+function initDirectCheckout() {
+  const joinButtons = document.querySelectorAll(".btn-join-now, .btn-workshop-join, #btn-join-sticky, .faq-orange-banner, #btn-join-workshop-hero");
 
-  // Intercept all Join / Checkout buttons to open the Payment Details modal
   joinButtons.forEach(btn => {
     btn.addEventListener("click", (e) => {
       e.preventDefault();
-      openModal();
-    });
-  });
 
-  // Close Modal Events
-  if (closeBtn) {
-    closeBtn.addEventListener("click", closeModal);
-  }
-  
-  modal.addEventListener("click", (e) => {
-    if (e.target === modal) closeModal();
-  });
+      // Retrieve preserved UTM and click tracking parameters
+      const tracking = getTrackingParams();
 
-  // Escape key to close modal
-  document.addEventListener("keydown", (e) => {
-    if (e.key === "Escape" && modal.classList.contains("active")) {
-      closeModal();
-    }
-  });
-
-  // Toggle Direct UPI QR view inside modal
-  if (toggleUpiBtn && directUpiBox) {
-    toggleUpiBtn.addEventListener("click", () => {
-      const isHidden = directUpiBox.style.display === "none";
-      if (isHidden) {
-        directUpiBox.style.display = "block";
-        toggleUpiBtn.innerHTML = '<i class="fa-solid fa-credit-card"></i> Switch back to Card / Razorpay Form';
-        generateUpiQR();
-      } else {
-        directUpiBox.style.display = "none";
-        toggleUpiBtn.innerHTML = '<i class="fa-solid fa-qrcode"></i> Or scan direct UPI QR Code / Apps';
-      }
-    });
-  }
-
-  // Copy UPI ID to Clipboard
-  if (btnCopyUpi) {
-    btnCopyUpi.addEventListener("click", () => {
-      navigator.clipboard.writeText(CONFIG.upiId).then(() => {
-        const originalHtml = btnCopyUpi.innerHTML;
-        btnCopyUpi.innerHTML = '<i class="fa-solid fa-check" style="color: #2ed573;"></i>';
-        setTimeout(() => {
-          btnCopyUpi.innerHTML = originalHtml;
-        }, 1500);
+      // Track initiate_checkout event in Google Tag Manager & Meta Pixel
+      trackEvent("initiate_checkout", {
+        value: CONFIG.ticketPrice,
+        currency: "INR",
+        item_name: "AI Creator Community Membership",
+        ...tracking
       });
-    });
-  }
 
-  // Handle Form Submission / Pay Button Click
-  if (btnSubmitPay) {
-    btnSubmitPay.addEventListener("click", handlePaymentSubmit);
-  }
-  
-  if (form) {
-    form.addEventListener("submit", (e) => {
-      e.preventDefault();
-      handlePaymentSubmit();
-    });
-  }
+      // Build target Razorpay redirect URL with notes/tracking params
+      try {
+        const redirectUrl = new URL(CONFIG.razorpayPageLink);
+        if (tracking.utm_source) redirectUrl.searchParams.set("notes[utm_source]", tracking.utm_source);
+        if (tracking.utm_medium) redirectUrl.searchParams.set("notes[utm_medium]", tracking.utm_medium);
+        if (tracking.utm_campaign) redirectUrl.searchParams.set("notes[utm_campaign]", tracking.utm_campaign);
+        if (tracking.utm_content) redirectUrl.searchParams.set("notes[utm_content]", tracking.utm_content);
+        if (tracking.utm_term) redirectUrl.searchParams.set("notes[utm_term]", tracking.utm_term);
+        if (tracking.gclid) redirectUrl.searchParams.set("notes[gclid]", tracking.gclid);
+        if (tracking.fbclid) redirectUrl.searchParams.set("notes[fbclid]", tracking.fbclid);
 
-  async function handlePaymentSubmit() {
-    clearErrors();
-
-    const email = (emailInput ? emailInput.value : "").trim();
-    const phone = (phoneInput ? phoneInput.value : "").trim();
-    const name = (nameInput ? nameInput.value : "").trim();
-
-    // Validation
-    const emailPattern = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-    const cleanPhone = phone.replace(/[^0-9]/g, '');
-
-    if (!email || !emailPattern.test(email)) {
-      showError("Please enter a valid email address.", emailInput);
-      return;
-    }
-
-    if (!phone || cleanPhone.length < 10) {
-      showError("Please enter a valid 10-digit mobile number.", phoneInput);
-      return;
-    }
-
-    if (!name || name.length < 2) {
-      showError("Please enter your full name.", nameInput);
-      return;
-    }
-
-    // Set Loading State on Pay Button
-    btnSubmitPay.disabled = true;
-    btnSubmitPay.innerHTML = '<i class="fa-solid fa-spinner fa-spin"></i> Processing...';
-
-    // Get active UTM and click tracking parameters
-    const tracking = getTrackingParams();
-
-    // Prepare Lead & Transaction Payload
-    const leadData = {
-      name: name,
-      email: email,
-      phone: "+91 " + cleanPhone,
-      amount: "₹" + CONFIG.ticketPrice + ".00",
-      status: "Payment Initiated",
-      timestamp: new Date().toISOString(),
-      source: "Razorpay Checkout Modal",
-      ...tracking
-    };
-
-    // Store in localStorage
-    localStorage.setItem("jaysan_lead_data", JSON.stringify(leadData));
-    localStorage.setItem("payer_email", email);
-    localStorage.setItem("payer_phone", cleanPhone);
-    localStorage.setItem("payer_name", name);
-
-    // Track GTM & Meta events
-    trackEvent("initiate_checkout", {
-      value: CONFIG.ticketPrice,
-      currency: "INR",
-      customer_name: name,
-      customer_email: email,
-      customer_phone: cleanPhone,
-      item_name: "AI Creator Community Membership",
-      ...tracking
-    });
-
-    // Send pre-payment lead data to Google Sheet Webhook (non-blocking)
-    sendDataToGoogleSheet(leadData);
-
-    // Short timeout to allow network request dispatch, then proceed to payment
-    setTimeout(() => {
-      if (CONFIG.razorpayPageLink) {
-        try {
-          const redirectUrl = new URL(CONFIG.razorpayPageLink);
-          // Pass Prefill fields for Razorpay Hosted Checkout
-          redirectUrl.searchParams.set("prefill[name]", name);
-          redirectUrl.searchParams.set("prefill[email]", email);
-          redirectUrl.searchParams.set("prefill[contact]", cleanPhone);
-          // Pass Notes fields so Razorpay Webhook extracts them into payment.entity.notes
-          redirectUrl.searchParams.set("notes[customer_name]", name);
-          if (tracking.utm_source) redirectUrl.searchParams.set("notes[utm_source]", tracking.utm_source);
-          if (tracking.utm_medium) redirectUrl.searchParams.set("notes[utm_medium]", tracking.utm_medium);
-          if (tracking.utm_campaign) redirectUrl.searchParams.set("notes[utm_campaign]", tracking.utm_campaign);
-          if (tracking.utm_content) redirectUrl.searchParams.set("notes[utm_content]", tracking.utm_content);
-          if (tracking.utm_term) redirectUrl.searchParams.set("notes[utm_term]", tracking.utm_term);
-          if (tracking.gclid) redirectUrl.searchParams.set("notes[gclid]", tracking.gclid);
-          if (tracking.fbclid) redirectUrl.searchParams.set("notes[fbclid]", tracking.fbclid);
-
-          window.location.href = redirectUrl.toString();
-        } catch (e) {
-          window.location.href = CONFIG.razorpayPageLink;
-        }
-      } else if (CONFIG.razorpayKeyId) {
-        closeModal();
-        launchRazorpay(name, email, cleanPhone, tracking);
-      } else {
-        // Fallback simulation mode
-        closeModal();
-        startVerificationFlow();
+        window.location.href = redirectUrl.toString();
+      } catch (err) {
+        window.location.href = CONFIG.razorpayPageLink;
       }
-    }, 600);
-  }
-
-  // Fallback for standard Razorpay JS Checkout if Key ID is configured
-  function launchRazorpay(name, email, phone, tracking = {}) {
-    if (typeof Razorpay === "undefined") {
-      window.location.href = CONFIG.razorpayPageLink;
-      return;
-    }
-
-    const options = {
-      key: CONFIG.razorpayKeyId,
-      amount: CONFIG.ticketPrice * 100, // In Paise
-      currency: "INR",
-      name: "JaySan Digital Academy",
-      description: "AI Creator Community Membership",
-      image: "assets/logo (1).png",
-      prefill: {
-        name: name,
-        email: email,
-        contact: phone
-      },
-      notes: {
-        customer_name: name,
-        utm_source: tracking.utm_source || "",
-        utm_medium: tracking.utm_medium || "",
-        utm_campaign: tracking.utm_campaign || "",
-        utm_content: tracking.utm_content || "",
-        utm_term: tracking.utm_term || "",
-        gclid: tracking.gclid || "",
-        fbclid: tracking.fbclid || ""
-      },
-      theme: {
-        color: "#0F52BA"
-      },
-      handler: function(response) {
-        trackEvent("purchase", {
-          value: CONFIG.ticketPrice,
-          currency: "INR",
-          transaction_id: response.razorpay_payment_id,
-          item_name: "AI Creator Community Membership"
-        });
-        window.location.href = "payment-success.html?payment_id=" + encodeURIComponent(response.razorpay_payment_id);
-      },
-      modal: {
-        ondismiss: function() {
-          if (btnSubmitPay) {
-            btnSubmitPay.disabled = false;
-            btnSubmitPay.innerHTML = `Pay ₹${CONFIG.ticketPrice}.00`;
-          }
-        }
-      }
-    };
-
-    const rzp = new Razorpay(options);
-    rzp.open();
-  }
-
-  function showError(message, inputElement) {
-    if (errorMsg) {
-      errorMsg.textContent = message;
-      errorMsg.className = "rzp-status-msg error";
-    }
-    if (inputElement) {
-      inputElement.classList.add("invalid");
-      inputElement.focus();
-    }
-  }
-
-  function clearErrors() {
-    if (errorMsg) {
-      errorMsg.textContent = "";
-      errorMsg.className = "rzp-status-msg";
-    }
-    [emailInput, phoneInput, nameInput].forEach(inp => {
-      if (inp) inp.classList.remove("invalid");
     });
-  }
-
-  function openModal() {
-    modal.classList.add("active");
-    document.body.style.overflow = "hidden";
-    clearErrors();
-
-    // Auto-fill from previous session if available
-    const savedName = localStorage.getItem("payer_name");
-    const savedEmail = localStorage.getItem("payer_email");
-    const savedPhone = localStorage.getItem("payer_phone");
-    
-    if (savedName && nameInput && !nameInput.value) nameInput.value = savedName;
-    if (savedEmail && emailInput && !emailInput.value) emailInput.value = savedEmail;
-    if (savedPhone && phoneInput && !phoneInput.value) phoneInput.value = savedPhone;
-
-    if (emailInput && !emailInput.value) {
-      setTimeout(() => emailInput.focus(), 200);
-    }
-  }
-
-  function closeModal() {
-    modal.classList.remove("active");
-    document.body.style.overflow = "";
-    if (btnSubmitPay) {
-      btnSubmitPay.disabled = false;
-      btnSubmitPay.innerHTML = `Pay ₹${CONFIG.ticketPrice}.00`;
-    }
-  }
-
-  // Generates dynamic UPI QR Code
-  function generateUpiQR() {
-    if (!upiQrImage || !upiIdText) return;
-    upiIdText.textContent = CONFIG.upiId;
-    const upiPayload = `upi://pay?pa=${encodeURIComponent(CONFIG.upiId)}&pn=${encodeURIComponent(CONFIG.payeeName)}`;
-    const qrUrl = `https://api.qrserver.com/v1/create-qr-code/?size=180x180&data=${encodeURIComponent(upiPayload)}`;
-    upiQrImage.src = qrUrl;
-  }
-
-  // Handles simulated security checks and redirect trigger
-  function startVerificationFlow() {
-    if (processingOverlay) {
-      processingOverlay.classList.add("active");
-    }
-
-    setTimeout(() => {
-      if (processingOverlay) {
-        processingOverlay.classList.remove("active");
-      }
-      showSuccessModal();
-    }, 2000);
-  }
-
-  function showSuccessModal(txnId = null) {
-    trackEvent('purchase', {
-      value: CONFIG.ticketPrice,
-      currency: "INR",
-      transaction_id: txnId || ("TXN_" + Date.now()),
-      item_name: "AI Creator Community Membership",
-      redirect_url: CONFIG.whatsappLink
-    });
-
-    if (successOverlay) {
-      successOverlay.classList.add("active");
-      setTimeout(() => {
-        if (progressBar) progressBar.style.width = "100%";
-      }, 100);
-
-      setTimeout(() => {
-        window.location.href = CONFIG.whatsappLink;
-      }, 3000);
-    }
-  }
-
-  // Direct WhatsApp Button click override
-  if (btnWhatsappDirect) {
-    btnWhatsappDirect.addEventListener("click", () => {
-      window.location.href = CONFIG.whatsappLink;
-    });
-  }
+  });
 
   // Auto-redirect to dedicated payment-success.html if returning from payment query string
   const urlParams = new URLSearchParams(window.location.search);
